@@ -1,4 +1,4 @@
-package net.sh4869.bot
+package k2night
 
 import fs2.Pipe
 import fs2.Stream
