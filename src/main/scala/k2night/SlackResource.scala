@@ -30,19 +30,14 @@ class SlackResource[F[_] : ContextShift](token: String)(implicit F: ConcurrentEf
   private val queue = F.toIO(Queue.bounded[F, Json](100)).unsafeRunSync()
 
   def start: Stream[F, INothing] = Stream.eval(http.client[F]()).flatMap { client =>
-    val request = HttpRequest.get[F](RTM_CONNECT_ENDPOINT.withQuery(Uri.Query("token", token)))
-    client.request(request).flatMap { resp =>
-      resp.body
-    }.through(byteStreamParser).flatMap { v =>
-      val url = Uri.parse(v.hcursor.downField("url").as[String].toOption.get).toOption.get
-      def wsPipe: Pipe[F, Frame[String], Frame[String]] = { x =>
-        val toTopic = x.map(_.a).through(stringStreamParser).through(topic.publish).drain
-        val toQueue = queue.dequeue.map(v => Frame.Text(v.toString()))
-        Stream(toTopic, toQueue).parJoinUnbounded
-      }
-
-      val request = WebSocketRequest.wss(url.host.host, url.path.stringify)
-      client.websocket(request, wsPipe).drain
+    // TODO: Create Case class of response and Option -> Either
+    client.request(rtmConnectRequest[F](token)).flatMap(_.body).through(byteStreamParser).map { v =>
+      for {
+        rawUrl <- v.hcursor.downField("url").as[String].toOption
+        url <- Uri.parse(rawUrl).toOption
+      } yield WebSocketRequest.wss(url.host.host, url.path.stringify)
+    }.flatMap {
+      _.map(client.websocket(_, wsPipe).drain).getOrElse(Stream.raiseError(new Exception("can not connect to rtm server")))
     }
   }
 
@@ -50,8 +45,15 @@ class SlackResource[F[_] : ContextShift](token: String)(implicit F: ConcurrentEf
 
   def write: Pipe[F, Json, Unit] = queue.enqueue
 
+  def wsPipe: Pipe[F, Frame[String], Frame[String]] = { x =>
+    val toTopic = x.map(_.a).through(stringStreamParser).through(topic.publish).drain
+    val toQueue = queue.dequeue.map(v => Frame.Text(v.toString()))
+    Stream(toTopic, toQueue).parJoinUnbounded
+  }
 }
 
 object SlackResource {
-  val RTM_CONNECT_ENDPOINT = Uri.https("slack.com", "/api/rtm.connect")
+  val RTM_CONNECT_ENDPOINT: Uri = Uri.https("slack.com", "/api/rtm.connect")
+
+  def rtmConnectRequest[F[_]]: String => HttpRequest[F] = token => HttpRequest.get[F](RTM_CONNECT_ENDPOINT.withQuery(Uri.Query("token", token)))
 }

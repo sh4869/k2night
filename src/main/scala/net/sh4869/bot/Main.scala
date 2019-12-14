@@ -30,8 +30,7 @@ object MainApp extends IOApp {
       val slackResource = new SlackResource[IO](token)
       val input2 = slackResource.read
       val pipe2: Process[IO, Json, Json] = _.filter(_.hcursor.downField("type").as[String].exists(_ == "message")).map(v => {
-        println(v)
-        val json = for {
+        for {
           channel <- v.hcursor.downField("channel").as[String]
           text <- v.hcursor.downField("text").as[String]
         } yield Json.obj(
@@ -40,14 +39,13 @@ object MainApp extends IOApp {
           ("type", Json.fromString("message")),
           ("id", Json.fromInt(1))
         )
-        println(json)
-        json
       }).filter(_.isRight).map(_.right.get)
       val output2: Pipe[IO, Json, Unit] = slackResource.write
 
       val bot2 = Bot("bot2", input2, pipe2, output2)
 
-      Stream(bot.stream(stdInOut.stdout), bot2.stream(stdInOut.stdout), stdInOut.start, slackResource.start).parJoinUnbounded
+
+      Stream(bot.stream(stdInOut.stdout), bot2.stream(stdInOut.stdout), stdInOut.start, slackResource.start.handleErrorWith { h => Stream[IO, String](s"${h.toString}\n").through(stdInOut.stdout) }).parJoinUnbounded
     }).compile.drain.as(ExitCode.Success)
   }
 }
