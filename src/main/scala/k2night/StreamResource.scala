@@ -8,15 +8,16 @@ import cats.effect.kernel.Async
 import cats.effect.syntax._
 import cats.implicits._
 
-trait BotResource[F[_], I, O] {
+
+trait StreamResource[F[_], I, O] {
   def input: Input[F, I]
   def output: Output[F, O]
 }
 
 /**
- * Botのリソースを扱うためのクラス
+ * BotのStreamリソースを扱うためのクラス
  */
-trait BotResourceManager[F[_] : Async, I, O] {
+trait StreamResourceManager[F[_] : Async, I, O] {
   /**
    * リソースを使うためのStreamを返す関数
    */ 
@@ -28,7 +29,7 @@ trait BotResourceManager[F[_] : Async, I, O] {
   /**
    * リソースを取得するための関数
    */
-  def resource: Resource[F, (Stream[F, Unit], BotResource[F, I, O])] = {
+  def resource: Resource[F, (Stream[F, Unit], StreamResource[F, I, O])] = {
     val a = for {
       topic <-Topic[F, I]
       queue <- Queue.unbounded[F, O]
@@ -46,7 +47,7 @@ trait BotResourceManager[F[_] : Async, I, O] {
 private case class EventPubSubManager[F[_]: Async, I, O](
     val topic: Topic[F, I],
     val queue: Queue[F, O]
-) extends BotResource[F, I, O] {
+) extends StreamResource[F, I, O] {
   def input: Input[F, I] = topic.subscribe(100)
   def output: Output[F, O] = i => i.evalMap(v => queue.offer(v))
   def release = topic.close.map(_ => ())

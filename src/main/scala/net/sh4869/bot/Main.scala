@@ -12,6 +12,7 @@ import fs2.Stream
 import fs2.io
 import fs2.text
 import k2night._
+import k2night.io.StdIOResource
 import fs2.concurrent.Topic
 import cats.effect.std.Queue
 

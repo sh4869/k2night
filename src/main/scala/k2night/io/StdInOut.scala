@@ -1,24 +1,21 @@
-package k2night
+package k2night.io
 
 import cats.effect.unsafe.implicits.global
-import cats.effect.std.Dispatcher
+
 import cats.effect.std.Queue
 import cats.effect.Async
-import cats.effect.Spawn
-import cats.effect.kernel.Concurrent
 import fs2.Stream
 import fs2.Pipe
 import fs2.concurrent.Topic
 import fs2.io
 import fs2.text
 import cats.implicits._
-import cats.effect.implicits._
 import cats.effect._
 import cats.effect.kernel.syntax.resource
-import java.nio.charset.Charset.defaultCharset
+import k2night.StreamResourceManager
 
 class StdIOResource[F[_]](implicit A: Async[F])
-    extends BotResourceManager[F, String, String] {
+    extends StreamResourceManager[F, String, String] {
 
   def startStreams(
       topic: Topic[F, String],
