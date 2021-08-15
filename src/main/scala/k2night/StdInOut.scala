@@ -1,28 +1,39 @@
 package k2night
 
-import cats.effect.Blocker
-import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
+import cats.effect.unsafe.implicits.global
+import cats.effect.std.Dispatcher
+import cats.effect.std.Queue
+import cats.effect.Async
+import cats.effect.Spawn
+import cats.effect.kernel.Concurrent
 import fs2.Stream
-import fs2.concurrent.Queue
+import fs2.Pipe
 import fs2.concurrent.Topic
 import fs2.io
 import fs2.text
-import k2night.Core._
+import cats.implicits._
+import cats.effect.implicits._
+import cats.effect._
+import cats.effect.kernel.syntax.resource
+import java.nio.charset.Charset.defaultCharset
 
-class StdInOut[F[_] : ContextShift](blocker: Blocker)(implicit F: ConcurrentEffect[F]) {
+class StdIOResource[F[_]](implicit A: Async[F])
+    extends BotResourceManager[F, String, String] {
 
-  private val topic = F.toIO(Topic[F, String]("")).unsafeRunSync()
+  def startStreams(
+      topic: Topic[F, String],
+      queue: Queue[F, String]
+  ): Stream[F, Unit] = {
+    Stream(
+      io
+        .stdinUtf8(100)
+        .through(text.lines)
+        .through(topic.publish),
+      Stream
+        .repeatEval(queue.take)
+        .through(io.stdoutLines())
+    ).parJoinUnbounded
+  }
 
-  private val queue = F.toIO(Queue.bounded[F, String](100)).unsafeRunSync()
-
-  private val inputS = io.stdin[F](4096, blocker.blockingContext).through(text.utf8Decode).through(topic.publish)
-
-  private val outputS = queue.dequeue.through(text.utf8Encode).through(io.stdout[F](blocker.blockingContext))
-
-  def start: Stream[F, Unit] = Stream(inputS, outputS).parJoinUnbounded
-
-  def stdin: Input[F, String] = topic.subscribe(100)
-
-  def stdout: Output[F, String] = queue.enqueue
+  def release = A.unit
 }
