@@ -8,9 +8,17 @@ import cats.effect.kernel.Async
 import cats.effect.syntax._
 import cats.implicits._
 
-
+/**
+ * BotのStreamリソース
+ */
 trait StreamResource[F[_], I, O] {
+  /**
+   * Stream input
+   */
   def input: Input[F, I]
+  /**
+   * Stream output
+   */
   def output: Output[F, O]
 }
 
@@ -44,6 +52,9 @@ trait StreamResourceManager[F[_] : Async, I, O] {
   }
 }
 
+/**
+ * Event Pubsub Manager
+ */
 private case class EventPubSubManager[F[_]: Async, I, O](
     val topic: Topic[F, I],
     val queue: Queue[F, O]
